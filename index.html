@@ -13,13 +13,13 @@ body {
   padding: 1rem;
 }
 .app {
-  max-width: 480px;
+  max-width: 520px;
   margin: auto;
   background: white;
   padding: 1rem;
   border-radius: 12px;
 }
-label { margin-top: 1rem; display: block; }
+label { display:block; margin-top:1rem; }
 input, button {
   width: 100%;
   padding: 0.6rem;
@@ -27,14 +27,20 @@ input, button {
 }
 button { margin-top: 0.8rem; }
 .card {
-  background: #eee;
-  padding: 0.6rem;
-  margin-top: 0.4rem;
-  border-radius: 6px;
-  cursor: pointer;
+  background:#eee;
+  padding:0.6rem;
+  border-radius:6px;
+  margin-top:0.4rem;
+  cursor:pointer;
 }
 .pos { color: green; }
 .neg { color: red; }
+.summary {
+  background:#f0f0f0;
+  padding:0.6rem;
+  border-radius:6px;
+  margin-top:0.6rem;
+}
 </style>
 </head>
 
@@ -48,13 +54,14 @@ button { margin-top: 0.8rem; }
 </div>
 
 <div id="app" class="app" style="display:none;">
-  <p>Inloggad som <strong id="user"></strong>
+  <p>
+    Inloggad som <strong id="user"></strong>
     <button onclick="logout()">Logga ut</button>
   </p>
 
   <h3>Registrera dag</h3>
 
-  <label>Datum (klicka för att välja)</label>
+  <label>Datum</label>
   <input type="date" id="date">
 
   <label>Start</label>
@@ -68,8 +75,15 @@ button { margin-top: 0.8rem; }
 
   <button onclick="saveDay()">💾 Spara dagen</button>
 
+  <h3>Veckovy</h3>
+
+  <label>Välj vecka</label>
+  <input type="week" id="weekPicker">
+
+  <div class="summary" id="weekSummary"></div>
+
   <h3>Totalt flexsaldo</h3>
-  <div id="totalFlex"></div>
+  <div class="summary" id="totalFlex"></div>
 
   <h3>Dag-historik (klicka för att redigera)</h3>
   <div id="days"></div>
@@ -86,8 +100,8 @@ const firebaseConfig = {
   projectId: "flexstampling"
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+const appFB = initializeApp(firebaseConfig);
+const db = getFirestore(appFB);
 
 const STANDARD = 480;
 let userId = null;
@@ -97,8 +111,10 @@ const dateEl = document.getElementById("date");
 const startEl = document.getElementById("start");
 const endEl = document.getElementById("end");
 const breakEl = document.getElementById("break");
+const weekPicker = document.getElementById("weekPicker");
 
-dateEl.valueAsDate = new Date(); // VIKTIGT: riktig datuminit
+dateEl.valueAsDate = new Date();
+weekPicker.value = getISOWeekString(new Date());
 
 window.login = () => {
   const pin = document.getElementById("pin").value.trim();
@@ -156,10 +172,22 @@ async function loadDays(){
 }
 
 function render(){
-  let total = 0;
+  let totalFlex = 0;
   daysDiv.innerHTML = "";
+
+  const [weekStart, weekEnd] = getWeekRange(weekPicker.value);
+  let weekMinutes = 0;
+  let weekFlex = 0;
+
   days.forEach(d=>{
-    total += d.flex;
+    totalFlex += d.flex;
+
+    const dayDate = new Date(d.date);
+    if (dayDate >= weekStart && dayDate <= weekEnd) {
+      weekMinutes += d.worked;
+      weekFlex += d.flex;
+    }
+
     const el = document.createElement("div");
     el.className = "card";
     el.innerHTML = `
@@ -170,7 +198,15 @@ function render(){
     el.onclick = () => loadDay(d);
     daysDiv.appendChild(el);
   });
-  totalFlex.innerHTML = `<strong>${total} min</strong>`;
+
+  totalFlexDiv.innerHTML =
+    `<strong>${(totalFlex/60).toFixed(1)} h (${totalFlex} min)</strong>`;
+
+  weekSummary.innerHTML = `
+    Arbetade timmar: <strong>${(weekMinutes/60).toFixed(1)} h</strong><br>
+    Veckoflex: <strong class="${weekFlex>=0?'pos':'neg'}">
+      ${weekFlex>=0?'+':''}${weekFlex} min
+    </strong>`;
 }
 
 function loadDay(d){
@@ -178,6 +214,28 @@ function loadDay(d){
   startEl.value = d.start;
   endEl.value = d.end;
   breakEl.value = d.br;
+}
+
+weekPicker.onchange = render;
+
+function getWeekRange(weekValue){
+  const [year, week] = weekValue.split("-W").map(Number);
+  const firstDay = new Date(year,0,1);
+  const daysOffset = (week-1)*7;
+  const monday = new Date(firstDay.setDate(firstDay.getDate() + daysOffset));
+  while (monday.getDay() !== 1) monday.setDate(monday.getDate() - 1);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return [monday, sunday];
+}
+
+function getISOWeekString(d){
+  const date = new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  const day = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(),0,1));
+  const weekNo = Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+  return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2,"0")}`;
 }
 
 const saved = localStorage.getItem("flexUser");
@@ -189,4 +247,3 @@ if (saved) {
 
 </body>
 </html>
-  
