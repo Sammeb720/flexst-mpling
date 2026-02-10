@@ -47,13 +47,15 @@
 <!-- LOGIN -->
 <div id="login" class="app">
   <h1>Flexstämpling</h1>
-  <button onclick="login()">Logga in med Google</button>
+  <label>Användarkod</label>
+  <input id="pin" placeholder="t.ex. alex eller 1234" />
+  <button onclick="login()">Logga in</button>
 </div>
 
 <!-- APP -->
 <div id="app" class="app" style="display:none;">
   <p>
-    Inloggad som <strong id="email"></strong>
+    Inloggad som <strong id="user"></strong>
     <button onclick="logout()">Logga ut</button>
   </p>
 
@@ -86,22 +88,7 @@
 </div>
 
 <script type="module">
-  /* =======================
-     IMPORTS
-  ======================= */
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-
-  import {
-    getAuth,
-    GoogleAuthProvider,
-    signInWithRedirect,
-    getRedirectResult,
-    onAuthStateChanged,
-    signOut,
-    setPersistence,
-    browserLocalPersistence
-  } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-
   import {
     getFirestore,
     collection,
@@ -111,68 +98,43 @@
     query
   } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-  /* =======================
-     FIREBASE CONFIG
-  ======================= */
   const firebaseConfig = {
     apiKey: "AIzaSyCSkjN-SafQEZrbhhhu-Mue4hf3GfADN3w",
     authDomain: "flexstampling.firebaseapp.com",
-    projectId: "flexstampling",
-    storageBucket: "flexstampling.firebasestorage.app",
-    messagingSenderId: "811650384722",
-    appId: "1:811650384722:web:17a31caca19e2e5edc308b"
+    projectId: "flexstampling"
   };
 
   const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
   const db = getFirestore(app);
-  const provider = new GoogleAuthProvider();
 
-  setPersistence(auth, browserLocalPersistence);
-
-  /* =======================
-     STATE
-  ======================= */
   const STANDARD_MIN = 480;
-  let uid = null;
+  let userId = null;
   let daysData = [];
 
   const startEl = document.getElementById("start");
   const endEl = document.getElementById("end");
   const breakEl = document.getElementById("break");
 
-  /* =======================
-     AUTH
-  ======================= */
-  window.login = async () => {
-    await signInWithRedirect(auth, provider);
+  window.login = () => {
+    const pin = document.getElementById("pin").value.trim();
+    if (!pin) return;
+    userId = pin;
+    localStorage.setItem("flexUser", pin);
+    showApp();
   };
 
-  window.logout = async () => {
-    await signOut(auth);
+  window.logout = () => {
+    localStorage.removeItem("flexUser");
+    location.reload();
   };
 
-  getRedirectResult(auth).catch(() => {});
+  function showApp() {
+    document.getElementById("login").style.display = "none";
+    document.getElementById("app").style.display = "block";
+    document.getElementById("user").textContent = userId;
+    loadDays();
+  }
 
-  onAuthStateChanged(auth, async user => {
-    const loginDiv = document.getElementById("login");
-    const appDiv = document.getElementById("app");
-
-    if (user) {
-      uid = user.uid;
-      loginDiv.style.display = "none";
-      appDiv.style.display = "block";
-      document.getElementById("email").textContent = user.email;
-      await loadDays();
-    } else {
-      loginDiv.style.display = "block";
-      appDiv.style.display = "none";
-    }
-  });
-
-  /* =======================
-     APP LOGIC
-  ======================= */
   window.stamp = type => {
     const t = new Date().toTimeString().slice(0,5);
     document.getElementById(type).value = t;
@@ -194,16 +156,16 @@
     const flex = worked - STANDARD_MIN;
     const date = new Date().toISOString().slice(0,10);
 
-    await setDoc(doc(db,"users",uid,"days",date),{
+    await setDoc(doc(db,"users",userId,"days",date),{
       date,start,end,br,worked,flex
     });
 
-    await loadDays();
+    loadDays();
   };
 
   async function loadDays(){
     daysData = [];
-    const q = query(collection(db,"users",uid,"days"));
+    const q = query(collection(db,"users",userId,"days"));
     const snap = await getDocs(q);
     snap.forEach(d => daysData.push(d.data()));
     daysData.sort((a,b)=>a.date.localeCompare(b.date));
@@ -218,9 +180,7 @@
 
     daysData.forEach(d=>{
       total += d.flex;
-      if (getWeek(new Date(d.date)) === currentWeek) {
-        weekFlex += d.flex;
-      }
+      if (getWeek(new Date(d.date)) === currentWeek) weekFlex += d.flex;
       html += `
         <div class="card">
           ${d.date} —
@@ -230,13 +190,11 @@
         </div>`;
     });
 
-    document.getElementById("totalFlex").innerHTML =
+    totalFlex.innerHTML =
       `<strong class="${total>=0?'pos':'neg'}">${total} min</strong>`;
-
-    document.getElementById("week").innerHTML =
+    week.innerHTML =
       `Veckoflex: <strong class="${weekFlex>=0?'pos':'neg'}">${weekFlex} min</strong>`;
-
-    document.getElementById("days").innerHTML = html || "Inga dagar ännu";
+    days.innerHTML = html || "Inga dagar ännu";
   }
 
   function getWeek(d){
@@ -245,6 +203,12 @@
     d.setUTCDate(d.getUTCDate() + 4 - day);
     const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
     return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  }
+
+  const savedUser = localStorage.getItem("flexUser");
+  if (savedUser) {
+    userId = savedUser;
+    showApp();
   }
 </script>
 
