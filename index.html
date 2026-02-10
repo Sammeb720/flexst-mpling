@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Flexstämpling</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #f4f4f4;
+      margin: 0;
+      padding: 1rem;
+    }
+    .app {
+      max-width: 480px;
+      margin: auto;
+      background: white;
+      padding: 1rem;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    }
+    h1, h2 { text-align: center; }
+    label { display: block; margin-top: 1rem; }
+    input, button {
+      width: 100%;
+      padding: 0.6rem;
+      margin-top: 0.3rem;
+      font-size: 1rem;
+    }
+    button { cursor: pointer; margin-top: 0.8rem; }
+    .row { display: flex; gap: 0.5rem; }
+    .row button { flex: 1; }
+    .card {
+      background: #f0f0f0;
+      padding: 0.7rem;
+      border-radius: 8px;
+      margin-top: 0.5rem;
+    }
+    .pos { color: green; }
+    .neg { color: red; }
+  </style>
+</head>
+<body>
+
+<div id="login" class="app">
+  <h1>Flexstämpling</h1>
+  <button onclick="login()">Logga in med Google</button>
+</div>
+
+<div id="app" class="app" style="display:none;">
+  <p>Inloggad som <strong id="email"></strong>
+    <button onclick="logout()">Logga ut</button>
+  </p>
+
+  <h2>Ny dag</h2>
+
+  <label>Start</label>
+  <input type="time" id="start">
+
+  <label>Slut</label>
+  <input type="time" id="end">
+
+  <label>Rast (min)</label>
+  <input type="number" id="break" value="60">
+
+  <div class="row">
+    <button onclick="stamp('start')">▶️ In nu</button>
+    <button onclick="stamp('end')">⏹️ Ut nu</button>
+  </div>
+
+  <button onclick="saveDay()">💾 Spara dagen</button>
+
+  <h2>Totalt flexsaldo</h2>
+  <div id="totalFlex" class="card"></div>
+
+  <h2>Denna vecka</h2>
+  <div id="week" class="card"></div>
+
+  <h2>Dag-historik</h2>
+  <div id="days"></div>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } 
+    from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+  import { getFirestore, collection, doc, setDoc, getDocs, query } 
+    from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCSkjN-SafQEZrbhhhu-Mue4hf3GfADN3w",
+    authDomain: "flexstampling.firebaseapp.com",
+    projectId: "flexstampling",
+    storageBucket: "flexstampling.firebasestorage.app",
+    messagingSenderId: "811650384722",
+    appId: "1:811650384722:web:17a31caca19e2e5edc308b"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  const provider = new GoogleAuthProvider();
+
+  const STANDARD_MIN = 480;
+  let uid = null;
+  let daysData = [];
+
+  window.login = () => signInWithRedirect(auth, provider);
+  window.logout = () => signOut(auth);
+
+  getRedirectResult(auth).catch(() => {});
+
+  onAuthStateChanged(auth, async user => {
+    if (!user) return;
+    uid = user.uid;
+    document.getElementById("login").style.display = "none";
+    document.getElementById("app").style.display = "block";
+    document.getElementById("email").textContent = user.email;
+    await loadDays();
+  });
+
+  function stamp(type) {
+    const t = new Date().toTimeString().slice(0,5);
+    document.getElementById(type).value = t;
+  }
+
+  function minutes(a,b){
+    const [h1,m1]=a.split(":").map(Number);
+    const [h2,m2]=b.split(":").map(Number);
+    return h2*60+m2-(h1*60+m1);
+  }
+
+  async function saveDay(){
+    const start = startEl.value;
+    const end = endEl.value;
+    const br = +breakEl.value;
+    if(!start||!end) return;
+
+    const worked = minutes(start,end)-br;
+    const flex = worked-STANDARD_MIN;
+    const date = new Date().toISOString().slice(0,10);
+
+    await setDoc(doc(db,"users",uid,"days",date),{
+      date,start,end,br,worked,flex
+    });
+
+    await loadDays();
+  }
+
+  async function loadDays(){
+    daysData=[];
+    const q = query(collection(db,"users",uid,"days"));
+    const snap = await getDocs(q);
+    snap.forEach(d=>daysData.push(d.data()));
+    daysData.sort((a,b)=>a.date.localeCompare(b.date));
+    render();
+  }
+
+  function render(){
+    let total=0;
+    let daysHTML="";
+    let weekFlex=0;
+    const nowWeek = new Date().getWeek();
+
+    daysData.forEach(d=>{
+      total+=d.flex;
+      if(new Date(d.date).getWeek()===nowWeek) weekFlex+=d.flex;
+      daysHTML+=`<div class="card">
+        ${d.date} | ${d.flex>=0?'<span class="pos">+':'<span class="neg">'}${d.flex} min</span>
+      </div>`;
+    });
+
+    totalFlex.innerHTML=`<strong class="${total>=0?'pos':'neg'}">${total} min</strong>`;
+    week.innerHTML=`Veckoflex: <strong class="${weekFlex>=0?'pos':'neg'}">${weekFlex} min</strong>`;
+    days.innerHTML=daysHTML||"Inga dagar ännu";
+  }
+
+  Date.prototype.getWeek=function(){
+    const d=new Date(Date.UTC(this.getFullYear(),this.getMonth(),this.getDate()));
+    const day=d.getUTCDay()||7;
+    d.setUTCDate(d.getUTCDate()+4-day);
+    const yearStart=new Date(Date.UTC(d.getUTCFullYear(),0,1));
+    return Math.ceil((((d-yearStart)/86400000)+1)/7);
+  }
+
+  const startEl=start,endEl=end,breakEl=document.getElementById("break");
+</script>
+
+</body>
+</html>
