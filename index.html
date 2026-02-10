@@ -56,7 +56,6 @@ button { margin-top:0.6rem; cursor:pointer; }
 
 <body>
 
-<!-- LOGIN -->
 <div id="loginView" class="app">
   <h2>Flexstämpling</h2>
   <label>Användarkod</label>
@@ -64,14 +63,11 @@ button { margin-top:0.6rem; cursor:pointer; }
   <button onclick="login()">Logga in</button>
 </div>
 
-<!-- APP -->
 <div id="appView" class="app" style="display:none;">
   <p>
     Inloggad som <strong id="userLabel"></strong>
     <button onclick="logout()">Logga ut</button>
   </p>
-
-  <h3>Registrera / redigera dag</h3>
 
   <label>Datum</label>
   <input type="date" id="dateInput">
@@ -87,33 +83,34 @@ button { margin-top:0.6rem; cursor:pointer; }
 
   <button onclick="stampNow('start')">▶️ Stämpla in nu</button>
   <button onclick="stampNow('end')">⏹️ Stämpla ut nu</button>
-
   <button onclick="saveDay()">💾 Spara dagen</button>
 
   <h3>Vecka</h3>
   <input type="week" id="weekInput" onchange="render()">
 
   <div id="weekSummary" class="summary"></div>
-
-  <h3>Totalt flexsaldo</h3>
   <div id="totalFlex" class="summary"></div>
 
-  <h3>Dag-historik (vald vecka)</h3>
+  <h3>Dagar (vald vecka)</h3>
   <div id="daysContainer"></div>
 </div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc }
-  from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+<!-- 🔥 Firebase v9 COMPAT (INGA MODULES) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
+<script>
 /* Firebase */
-const firebaseConfig = {
+firebase.initializeApp({
   apiKey: "AIzaSyCSkjN-SafQEZrbhhhu-Mue4hf3GfADN3w",
   projectId: "flexstampling"
-};
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+});
+const db = firebase.firestore();
+
+/* State */
+const STANDARD_MIN = 480;
+let userId = null;
+let daysData = [];
 
 /* DOM */
 const loginView = document.getElementById("loginView");
@@ -129,17 +126,12 @@ const daysContainer = document.getElementById("daysContainer");
 const totalFlexDiv = document.getElementById("totalFlex");
 const weekSummary = document.getElementById("weekSummary");
 
-/* State */
-const STANDARD_MIN = 480;
-let userId = null;
-let daysData = [];
-
 /* Init */
 dateInput.valueAsDate = new Date();
 weekInput.value = isoWeek(new Date());
 
 /* Login */
-window.login = () => {
+function login() {
   const pin = pinInput.value.trim();
   if (!pin) return alert("Ange användarkod");
   userId = pin;
@@ -148,94 +140,74 @@ window.login = () => {
   appView.style.display = "block";
   userLabel.textContent = userId;
   loadDays();
-};
+}
 
-window.logout = () => {
+function logout() {
   localStorage.removeItem("flexUser");
   location.reload();
-};
+}
 
-/* Helpers */
 function minutes(a,b){
   const [h1,m1]=a.split(":").map(Number);
   const [h2,m2]=b.split(":").map(Number);
   return h2*60+m2-(h1*60+m1);
 }
 
-window.stampNow = (type) => {
-  const t = new Date().toTimeString().slice(0,5);
-  if (type==="start") startInput.value=t;
-  if (type==="end") endInput.value=t;
-  dateInput.valueAsDate = new Date();
-};
+function stampNow(type){
+  const t=new Date().toTimeString().slice(0,5);
+  if(type==="start") startInput.value=t;
+  if(type==="end") endInput.value=t;
+  dateInput.valueAsDate=new Date();
+}
 
-window.saveDay = async () => {
-  if (!dateInput.value || !startInput.value || !endInput.value)
-    return alert("Fyll i datum, start och slut");
-
-  const worked = minutes(startInput.value,endInput.value) - Number(breakInput.value);
-  const flex = worked - STANDARD_MIN;
-
-  await setDoc(doc(db,"users",userId,"days",dateInput.value),{
-    date:dateInput.value,
-    start:startInput.value,
-    end:endInput.value,
-    br:Number(breakInput.value),
-    worked,
-    flex
-  });
-
+async function saveDay(){
+  const worked=minutes(startInput.value,endInput.value)-Number(breakInput.value);
+  const flex=worked-STANDARD_MIN;
+  await db.collection("users").doc(userId).collection("days")
+    .doc(dateInput.value).set({
+      date:dateInput.value,start:startInput.value,end:endInput.value,
+      br:Number(breakInput.value),worked,flex
+    });
   loadDays();
-};
+}
 
 async function loadDays(){
   daysData=[];
-  const snap=await getDocs(collection(db,"users",userId,"days"));
+  const snap=await db.collection("users").doc(userId).collection("days").get();
   snap.forEach(d=>daysData.push(d.data()));
-  daysData.sort((a,b)=>a.date.localeCompare(b.date));
   render();
 }
 
-window.render = () => {
+function render(){
   daysContainer.innerHTML="";
-  let totalFlex=0, weekFlex=0, weekWorked=0;
+  let total=0, weekFlex=0, weekWorked=0;
   const [ws,we]=weekRange(weekInput.value);
 
   daysData.forEach(d=>{
-    totalFlex+=d.flex;
+    total+=d.flex;
     const dt=new Date(d.date);
-    if(dt<ws||dt>we) return;
+    if(dt<ws||dt>we)return;
 
     weekFlex+=d.flex;
     weekWorked+=d.worked;
 
     const row=document.createElement("div");
     row.className="dayRow";
-
-    const text=document.createElement("div");
-    text.className="dayText";
-    text.innerHTML=`${d.date} – <span class="${d.flex>=0?'pos':'neg'}">${d.flex} min</span>`;
-    text.onclick=()=>loadDay(d);
-
-    const del=document.createElement("button");
-    del.className="deleteBtn";
-    del.textContent="Radera";
-    del.onclick=async()=>{
-      if(!confirm(\`Radera ${d.date}?\`))return;
-      await deleteDoc(doc(db,"users",userId,"days",d.date));
-      loadDays();
-    };
-
-    row.appendChild(text);
-    row.appendChild(del);
+    row.innerHTML=`${d.date} – ${d.flex} min
+      <button class="deleteBtn" onclick="deleteDay('${d.date}')">Radera</button>`;
+    row.onclick=()=>loadDay(d);
     daysContainer.appendChild(row);
   });
 
-  totalFlexDiv.innerHTML=`<strong>${totalFlex} min</strong>`;
-  weekSummary.innerHTML=
-    `Arbetade timmar: <strong>${(weekWorked/60).toFixed(1)} h</strong><br>
-     Veckoflex: <strong>${weekFlex} min</strong>`;
-};
+  totalFlexDiv.innerHTML=`Totalt flex: ${total} min`;
+  weekSummary.innerHTML=`Veckoflex: ${weekFlex} min (${(weekWorked/60).toFixed(1)} h)`;
+}
+
+function deleteDay(date){
+  if(!confirm("Radera "+date+"?"))return;
+  db.collection("users").doc(userId).collection("days").doc(date).delete();
+  loadDays();
+}
 
 function loadDay(d){
   dateInput.value=d.date;
@@ -248,8 +220,7 @@ function weekRange(w){
   const[y,n]=w.split("-W").map(Number);
   const d=new Date(y,0,1+(n-1)*7);
   while(d.getDay()!=1)d.setDate(d.getDate()-1);
-  const s=new Date(d),e=new Date(d);
-  e.setDate(d.getDate()+6);
+  const s=new Date(d),e=new Date(d);e.setDate(d.getDate()+6);
   return[s,e];
 }
 function isoWeek(d){
@@ -260,7 +231,6 @@ function isoWeek(d){
   return`${d.getUTCFullYear()}-W${String(w).padStart(2,"0")}`;
 }
 
-/* Auto-login */
 const saved=localStorage.getItem("flexUser");
 if(saved){pinInput.value=saved;login();}
 </script>
