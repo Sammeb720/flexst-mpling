@@ -1,0 +1,15 @@
+{
+  "name": "Flexstämpling",
+  "short_name": "Flex",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/747/747310.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
