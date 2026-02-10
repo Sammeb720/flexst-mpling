@@ -27,29 +27,32 @@ input, button {
   margin-top:0.3rem;
 }
 button { margin-top:0.6rem; cursor:pointer; }
-.card {
-  background:#eee;
-  padding:0.6rem;
-  margin-top:0.4rem;
-  border-radius:6px;
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-}
-.pos { color:green; }
-.neg { color:red; }
 .summary {
   background:#f0f0f0;
   padding:0.6rem;
   border-radius:6px;
   margin-top:0.6rem;
 }
-.iconBtn {
-  border:none;
-  background:transparent;
-  cursor:pointer;
-  font-size:1.2rem;
+.dayRow {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  background:#eee;
+  padding:0.6rem;
+  margin-top:0.4rem;
+  border-radius:6px;
 }
+.dayText {
+  cursor:pointer;
+}
+.deleteBtn {
+  background:#ffdddd;
+  border:1px solid #cc0000;
+  color:#900;
+  padding:0.3rem 0.6rem;
+}
+.pos { color:green; }
+.neg { color:red; }
 </style>
 </head>
 
@@ -90,9 +93,7 @@ button { margin-top:0.6rem; cursor:pointer; }
   <button onclick="saveDay()">💾 Spara dagen</button>
 
   <h3>Veckovy</h3>
-  <label>Välj vecka</label>
   <input type="week" id="weekInput" onchange="render()">
-
   <div id="weekSummary" class="summary"></div>
 
   <h3>Totalt flexsaldo</h3>
@@ -107,39 +108,31 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-/* Firebase */
 const firebaseConfig = {
   apiKey: "AIzaSyCSkjN-SafQEZrbhhhu-Mue4hf3GfADN3w",
   projectId: "flexstampling"
 };
+
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-/* State */
 const STANDARD_MIN = 480;
 let userId = null;
 let daysData = [];
 
-/* DOM */
-const loginView = document.getElementById("loginView");
-const appView = document.getElementById("appView");
-const pinInput = document.getElementById("pinInput");
-const userLabel = document.getElementById("userLabel");
 const dateInput = document.getElementById("dateInput");
 const startInput = document.getElementById("startInput");
 const endInput = document.getElementById("endInput");
 const breakInput = document.getElementById("breakInput");
 const weekInput = document.getElementById("weekInput");
-const weekSummary = document.getElementById("weekSummary");
-const totalFlexDiv = document.getElementById("totalFlex");
 const daysContainer = document.getElementById("daysContainer");
+const totalFlexDiv = document.getElementById("totalFlex");
+const weekSummary = document.getElementById("weekSummary");
 
-/* Init */
 dateInput.valueAsDate = new Date();
 weekInput.value = isoWeek(new Date());
 
-/* Login */
-window.login = function () {
+window.login = () => {
   const pin = pinInput.value.trim();
   if (!pin) return alert("Ange användarkod");
   userId = pin;
@@ -150,98 +143,76 @@ window.login = function () {
   loadDays();
 };
 
-window.logout = function () {
+window.logout = () => {
   localStorage.removeItem("flexUser");
   location.reload();
 };
 
-/* Helpers */
-function minutes(a, b) {
-  const [h1, m1] = a.split(":").map(Number);
-  const [h2, m2] = b.split(":").map(Number);
-  return h2 * 60 + m2 - (h1 * 60 + m1);
+function minutes(a,b){
+  const [h1,m1]=a.split(":").map(Number);
+  const [h2,m2]=b.split(":").map(Number);
+  return h2*60+m2-(h1*60+m1);
 }
 
-/* Stämpla NU */
-window.stampNow = function(type) {
+window.stampNow = (type) => {
   const now = new Date();
-  const hh = String(now.getHours()).padStart(2,"0");
-  const mm = String(now.getMinutes()).padStart(2,"0");
-  const time = `${hh}:${mm}`;
-  if (type === "start") startInput.value = time;
-  if (type === "end") endInput.value = time;
+  const t = now.toTimeString().slice(0,5);
+  if (type==="start") startInput.value=t;
+  if (type==="end") endInput.value=t;
   dateInput.valueAsDate = new Date();
 };
 
-/* Spara dag */
-window.saveDay = async function () {
+window.saveDay = async () => {
   if (!dateInput.value || !startInput.value || !endInput.value)
     return alert("Fyll i datum, start och slut");
 
-  const worked =
-    minutes(startInput.value, endInput.value) -
-    Number(breakInput.value);
-
+  const worked = minutes(startInput.value,endInput.value) - Number(breakInput.value);
   const flex = worked - STANDARD_MIN;
 
-  await setDoc(doc(db, "users", userId, "days", dateInput.value), {
-    date: dateInput.value,
-    start: startInput.value,
-    end: endInput.value,
-    br: Number(breakInput.value),
+  await setDoc(doc(db,"users",userId,"days",dateInput.value),{
+    date:dateInput.value,
+    start:startInput.value,
+    end:endInput.value,
+    br:Number(breakInput.value),
     worked,
-    flex,
-    updatedAt: new Date().toISOString()
+    flex
   });
 
   loadDays();
 };
 
-/* Load & render */
-async function loadDays() {
-  daysData = [];
-  const snap = await getDocs(collection(db, "users", userId, "days"));
-  snap.forEach(d => daysData.push(d.data()));
-  daysData.sort((a, b) => a.date.localeCompare(b.date));
+async function loadDays(){
+  daysData=[];
+  const snap=await getDocs(collection(db,"users",userId,"days"));
+  snap.forEach(d=>daysData.push(d.data()));
+  daysData.sort((a,b)=>a.date.localeCompare(b.date));
   render();
 }
 
-window.render = function () {
-  daysContainer.innerHTML = "";
+window.render = () => {
+  daysContainer.innerHTML="";
+  let total=0, weekFlex=0, weekWorked=0;
+  const [ws,we]=weekRange(weekInput.value);
 
-  let totalFlex = 0;
-  let weekFlex = 0;
-  let weekWorked = 0;
-  const [ws, we] = weekRange(weekInput.value);
+  daysData.forEach(d=>{
+    total+=d.flex;
+    const dt=new Date(d.date);
+    if(dt>=ws&&dt<=we){weekFlex+=d.flex;weekWorked+=d.worked;}
 
-  daysData.forEach(d => {
-    totalFlex += d.flex;
+    const row=document.createElement("div");
+    row.className="dayRow";
 
-    const dt = new Date(d.date);
-    if (dt >= ws && dt <= we) {
-      weekFlex += d.flex;
-      weekWorked += d.worked;
-    }
+    const text=document.createElement("div");
+    text.className="dayText";
+    text.innerHTML=`${d.date} – <span class="${d.flex>=0?'pos':'neg'}">${d.flex} min</span>`;
+    text.onclick=()=>loadDay(d);
 
-    const row = document.createElement("div");
-    row.className = "card";
-
-    const text = document.createElement("div");
-    text.innerHTML = `
-      ${d.date} –
-      <span class="${d.flex >= 0 ? 'pos' : 'neg'}">
-        ${d.flex >= 0 ? '+' : ''}${d.flex} min
-      </span>`;
-    text.style.cursor = "pointer";
-    text.onclick = () => loadDay(d);
-
-    const del = document.createElement("button");
-    del.className = "iconBtn";
-    del.textContent = "🗑️";
-    del.onclick = async (e) => {
-      e.stopPropagation();
-      if (!confirm(`Radera ${d.date}?`)) return;
-      await deleteDoc(doc(db, "users", userId, "days", d.date));
+    const del=document.createElement("button");
+    del.className="deleteBtn";
+    del.textContent="Radera";
+    del.onclick=async()=>{
+      if(!confirm(`Radera ${d.date}?`))return;
+      await deleteDoc(doc(db,"users",userId,"days",d.date));
       loadDays();
     };
 
@@ -250,44 +221,36 @@ window.render = function () {
     daysContainer.appendChild(row);
   });
 
-  totalFlexDiv.innerHTML = `<strong>${totalFlex} min</strong>`;
-  weekSummary.innerHTML =
-    `Arbetade timmar: <strong>${(weekWorked/60).toFixed(1)} h</strong><br>
-     Veckoflex: <strong class="${weekFlex>=0?'pos':'neg'}">${weekFlex} min</strong>`;
+  totalFlexDiv.innerHTML=`<strong>${total} min</strong>`;
+  weekSummary.innerHTML=
+    `Arbetade timmar: ${(weekWorked/60).toFixed(1)} h<br>
+     Veckoflex: ${weekFlex} min`;
 };
 
-function loadDay(d) {
-  dateInput.value = d.date;
-  startInput.value = d.start;
-  endInput.value = d.end;
-  breakInput.value = d.br;
+function loadDay(d){
+  dateInput.value=d.date;
+  startInput.value=d.start;
+  endInput.value=d.end;
+  breakInput.value=d.br;
 }
 
-/* Week helpers */
-function weekRange(w) {
-  const [y, n] = w.split("-W").map(Number);
-  const d = new Date(y, 0, 1 + (n - 1) * 7);
-  while (d.getDay() !== 1) d.setDate(d.getDate() - 1);
-  const s = new Date(d);
-  const e = new Date(d);
-  e.setDate(d.getDate() + 6);
-  return [s, e];
+function weekRange(w){
+  const[y,n]=w.split("-W").map(Number);
+  const d=new Date(y,0,1+(n-1)*7);
+  while(d.getDay()!=1)d.setDate(d.getDate()-1);
+  const s=new Date(d),e=new Date(d);e.setDate(d.getDate()+6);
+  return[s,e];
+}
+function isoWeek(d){
+  d=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  d.setUTCDate(d.getUTCDate()+4-(d.getUTCDay()||7));
+  const y=new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  const w=Math.ceil((((d-y)/86400000)+1)/7);
+  return`${d.getUTCFullYear()}-W${String(w).padStart(2,"0")}`;
 }
 
-function isoWeek(d) {
-  d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-  const y = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const w = Math.ceil((((d - y) / 86400000) + 1) / 7);
-  return `${d.getUTCFullYear()}-W${String(w).padStart(2,"0")}`;
-}
-
-/* Auto-login */
-const saved = localStorage.getItem("flexUser");
-if (saved) {
-  pinInput.value = saved;
-  login();
-}
+const saved=localStorage.getItem("flexUser");
+if(saved){pinInput.value=saved;login();}
 </script>
 
 </body>
