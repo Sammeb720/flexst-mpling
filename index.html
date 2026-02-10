@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Flexstämpling</title>
 
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+
 <style>
 body {
   font-family: system-ui, sans-serif;
@@ -24,7 +27,7 @@ input, button {
   padding:0.6rem;
   margin-top:0.3rem;
 }
-button { margin-top:0.8rem; cursor:pointer; }
+button { margin-top:0.6rem; cursor:pointer; }
 .card {
   background:#eee;
   padding:0.6rem;
@@ -73,6 +76,9 @@ button { margin-top:0.8rem; cursor:pointer; }
 
   <label>Rast (min)</label>
   <input type="number" id="breakInput" value="60">
+
+  <button onclick="stampNow('start')">▶️ Stämpla in nu</button>
+  <button onclick="stampNow('end')">⏹️ Stämpla ut nu</button>
 
   <button onclick="saveDay()">💾 Spara dagen</button>
 
@@ -152,6 +158,19 @@ function minutes(a, b) {
   return h2 * 60 + m2 - (h1 * 60 + m1);
 }
 
+/* Stämpla NU */
+window.stampNow = function(type) {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2,"0");
+  const mm = String(now.getMinutes()).padStart(2,"0");
+  const time = `${hh}:${mm}`;
+
+  if (type === "start") startInput.value = time;
+  if (type === "end") endInput.value = time;
+
+  dateInput.valueAsDate = new Date();
+};
+
 /* Save day */
 window.saveDay = async function () {
   try {
@@ -186,7 +205,6 @@ window.saveDay = async function () {
     alert("✅ Dagen sparad");
     loadDays();
   } catch (e) {
-    console.error(e);
     alert("❌ Kunde inte spara: " + e.message);
   }
 };
