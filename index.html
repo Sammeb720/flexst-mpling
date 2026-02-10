@@ -48,7 +48,7 @@
 <div id="login" class="app">
   <h1>Flexstämpling</h1>
   <label>Användarkod</label>
-  <input id="pin" placeholder="t.ex. alex eller 1234" />
+  <input id="pin" placeholder="t.ex. alex eller 1234">
   <button onclick="login()">Logga in</button>
 </div>
 
@@ -60,6 +60,9 @@
   </p>
 
   <h2>Ny dag</h2>
+
+  <label>Datum</label>
+  <input type="date" id="date">
 
   <label>Start</label>
   <input type="time" id="start">
@@ -111,9 +114,12 @@
   let userId = null;
   let daysData = [];
 
+  const dateEl = document.getElementById("date");
   const startEl = document.getElementById("start");
   const endEl = document.getElementById("end");
   const breakEl = document.getElementById("break");
+
+  dateEl.value = new Date().toISOString().slice(0,10);
 
   window.login = () => {
     const pin = document.getElementById("pin").value.trim();
@@ -147,19 +153,24 @@
   }
 
   window.saveDay = async () => {
+    const date = dateEl.value;
     const start = startEl.value;
     const end = endEl.value;
     const br = +breakEl.value;
-    if (!start || !end) return;
+
+    if (!date || !start || !end) {
+      alert("Fyll i datum, start och slut");
+      return;
+    }
 
     const worked = minutes(start,end) - br;
     const flex = worked - STANDARD_MIN;
-    const date = new Date().toISOString().slice(0,10);
 
     await setDoc(doc(db,"users",userId,"days",date),{
       date,start,end,br,worked,flex
     });
 
+    alert("Dagen sparad 👍");
     loadDays();
   };
 
