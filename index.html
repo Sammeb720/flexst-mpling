@@ -98,7 +98,7 @@ button { margin-top:0.6rem; cursor:pointer; }
   <h3>Totalt flexsaldo</h3>
   <div id="totalFlex" class="summary"></div>
 
-  <h3>Dagar (vald vecka)</h3>
+  <h3>Dag-historik (vald vecka)</h3>
   <div id="daysContainer"></div>
 </div>
 
@@ -171,7 +171,10 @@ window.saveDay = async () => {
   if (!dateInput.value || !startInput.value || !endInput.value)
     return alert("Fyll i datum, start och slut");
 
-  const worked = minutes(startInput.value,endInput.value) - Number(breakInput.value);
+  const worked =
+    minutes(startInput.value,endInput.value) -
+    Number(breakInput.value);
+
   const flex = worked - STANDARD_MIN;
 
   await setDoc(doc(db,"users",userId,"days",dateInput.value),{
@@ -186,7 +189,7 @@ window.saveDay = async () => {
   loadDays();
 };
 
-/* Load all days (en gång) */
+/* Load ALL days once */
 async function loadDays(){
   daysData=[];
   const snap=await getDocs(collection(db,"users",userId,"days"));
@@ -195,16 +198,21 @@ async function loadDays(){
   render();
 }
 
-/* Render ENBART vald vecka */
+/* Render ONLY selected week */
 window.render = () => {
   daysContainer.innerHTML="";
-  let totalFlex=0, weekFlex=0, weekWorked=0;
+
+  let totalFlex=0;
+  let weekFlex=0;
+  let weekWorked=0;
+
   const [ws,we]=weekRange(weekInput.value);
 
   daysData.forEach(d=>{
     totalFlex+=d.flex;
+
     const dt=new Date(d.date);
-    if(dt<ws||dt>we) return; // ⭐ FILTER HÄR
+    if(dt < ws || dt > we) return;   // ⭐ ENDAST VALD VECKA
 
     weekFlex+=d.flex;
     weekWorked+=d.worked;
@@ -221,7 +229,7 @@ window.render = () => {
     del.className="deleteBtn";
     del.textContent="Radera";
     del.onclick=async()=>{
-      if(!confirm(`Radera ${d.date}?`))return;
+      if(!confirm(\`Radera ${d.date}?\`)) return;
       await deleteDoc(doc(db,"users",userId,"days",d.date));
       loadDays();
     };
@@ -231,10 +239,10 @@ window.render = () => {
     daysContainer.appendChild(row);
   });
 
-  totalFlexDiv.innerHTML=`<strong>${totalFlex} min</strong>`;
-  weekSummary.innerHTML=
-    `Arbetade timmar: ${(weekWorked/60).toFixed(1)} h<br>
-     Veckoflex: ${weekFlex} min`;
+  totalFlexDiv.innerHTML = `<strong>${totalFlex} min</strong>`;
+  weekSummary.innerHTML =
+    `Arbetade timmar: <strong>${(weekWorked/60).toFixed(1)} h</strong><br>
+     Veckoflex: <strong class="${weekFlex>=0?'pos':'neg'}">${weekFlex} min</strong>`;
 };
 
 function loadDay(d){
@@ -249,7 +257,8 @@ function weekRange(w){
   const[y,n]=w.split("-W").map(Number);
   const d=new Date(y,0,1+(n-1)*7);
   while(d.getDay()!=1)d.setDate(d.getDate()-1);
-  const s=new Date(d),e=new Date(d);e.setDate(d.getDate()+6);
+  const s=new Date(d),e=new Date(d);
+  e.setDate(d.getDate()+6);
   return[s,e];
 }
 function isoWeek(d){
