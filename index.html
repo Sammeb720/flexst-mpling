@@ -42,9 +42,7 @@ button { margin-top:0.6rem; cursor:pointer; }
   margin-top:0.4rem;
   border-radius:6px;
 }
-.dayText {
-  cursor:pointer;
-}
+.dayText { cursor:pointer; }
 .deleteBtn {
   background:#ffdddd;
   border:1px solid #cc0000;
@@ -92,14 +90,15 @@ button { margin-top:0.6rem; cursor:pointer; }
 
   <button onclick="saveDay()">💾 Spara dagen</button>
 
-  <h3>Veckovy</h3>
+  <h3>Vecka</h3>
   <input type="week" id="weekInput" onchange="render()">
+
   <div id="weekSummary" class="summary"></div>
 
   <h3>Totalt flexsaldo</h3>
   <div id="totalFlex" class="summary"></div>
 
-  <h3>Dag-historik</h3>
+  <h3>Dagar (vald vecka)</h3>
   <div id="daysContainer"></div>
 </div>
 
@@ -108,18 +107,20 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
+/* Firebase */
 const firebaseConfig = {
   apiKey: "AIzaSyCSkjN-SafQEZrbhhhu-Mue4hf3GfADN3w",
   projectId: "flexstampling"
 };
-
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+/* State */
 const STANDARD_MIN = 480;
 let userId = null;
 let daysData = [];
 
+/* DOM */
 const dateInput = document.getElementById("dateInput");
 const startInput = document.getElementById("startInput");
 const endInput = document.getElementById("endInput");
@@ -129,9 +130,11 @@ const daysContainer = document.getElementById("daysContainer");
 const totalFlexDiv = document.getElementById("totalFlex");
 const weekSummary = document.getElementById("weekSummary");
 
+/* Init */
 dateInput.valueAsDate = new Date();
 weekInput.value = isoWeek(new Date());
 
+/* Login */
 window.login = () => {
   const pin = pinInput.value.trim();
   if (!pin) return alert("Ange användarkod");
@@ -148,20 +151,22 @@ window.logout = () => {
   location.reload();
 };
 
+/* Helpers */
 function minutes(a,b){
   const [h1,m1]=a.split(":").map(Number);
   const [h2,m2]=b.split(":").map(Number);
   return h2*60+m2-(h1*60+m1);
 }
 
+/* Stämpla NU */
 window.stampNow = (type) => {
-  const now = new Date();
-  const t = now.toTimeString().slice(0,5);
+  const t = new Date().toTimeString().slice(0,5);
   if (type==="start") startInput.value=t;
   if (type==="end") endInput.value=t;
   dateInput.valueAsDate = new Date();
 };
 
+/* Spara dag */
 window.saveDay = async () => {
   if (!dateInput.value || !startInput.value || !endInput.value)
     return alert("Fyll i datum, start och slut");
@@ -181,6 +186,7 @@ window.saveDay = async () => {
   loadDays();
 };
 
+/* Load all days (en gång) */
 async function loadDays(){
   daysData=[];
   const snap=await getDocs(collection(db,"users",userId,"days"));
@@ -189,15 +195,19 @@ async function loadDays(){
   render();
 }
 
+/* Render ENBART vald vecka */
 window.render = () => {
   daysContainer.innerHTML="";
-  let total=0, weekFlex=0, weekWorked=0;
+  let totalFlex=0, weekFlex=0, weekWorked=0;
   const [ws,we]=weekRange(weekInput.value);
 
   daysData.forEach(d=>{
-    total+=d.flex;
+    totalFlex+=d.flex;
     const dt=new Date(d.date);
-    if(dt>=ws&&dt<=we){weekFlex+=d.flex;weekWorked+=d.worked;}
+    if(dt<ws||dt>we) return; // ⭐ FILTER HÄR
+
+    weekFlex+=d.flex;
+    weekWorked+=d.worked;
 
     const row=document.createElement("div");
     row.className="dayRow";
@@ -221,7 +231,7 @@ window.render = () => {
     daysContainer.appendChild(row);
   });
 
-  totalFlexDiv.innerHTML=`<strong>${total} min</strong>`;
+  totalFlexDiv.innerHTML=`<strong>${totalFlex} min</strong>`;
   weekSummary.innerHTML=
     `Arbetade timmar: ${(weekWorked/60).toFixed(1)} h<br>
      Veckoflex: ${weekFlex} min`;
@@ -234,6 +244,7 @@ function loadDay(d){
   breakInput.value=d.br;
 }
 
+/* Week helpers */
 function weekRange(w){
   const[y,n]=w.split("-W").map(Number);
   const d=new Date(y,0,1+(n-1)*7);
@@ -249,6 +260,7 @@ function isoWeek(d){
   return`${d.getUTCFullYear()}-W${String(w).padStart(2,"0")}`;
 }
 
+/* Auto-login */
 const saved=localStorage.getItem("flexUser");
 if(saved){pinInput.value=saved;login();}
 </script>
