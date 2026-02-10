@@ -48,42 +48,43 @@ button { margin-top:0.8rem; }
 <div id="loginView" class="app">
   <h2>Flexstämpling</h2>
   <label>Användarkod</label>
-  <input id="pinInput" placeholder="t.ex. alex">
-  <button id="loginBtn">Logga in</button>
+  <input id="pin">
+  <button onclick="login()">Logga in</button>
 </div>
 
 <div id="appView" class="app" style="display:none;">
   <p>
     Inloggad som <strong id="userLabel"></strong>
-    <button id="logoutBtn">Logga ut</button>
+    <button onclick="logout()">Logga ut</button>
   </p>
 
   <h3>Registrera dag</h3>
 
   <label>Datum</label>
-  <input type="date" id="dateInput">
+  <input type="date" id="date">
 
   <label>Start</label>
-  <input type="time" id="startInput">
+  <input type="time" id="start">
 
   <label>Slut</label>
-  <input type="time" id="endInput">
+  <input type="time" id="end">
 
   <label>Rast (min)</label>
-  <input type="number" id="breakInput" value="60">
+  <input type="number" id="break" value="60">
 
-  <button id="saveBtn">💾 Spara dagen</button>
+  <button onclick="saveDay()">💾 Spara dagen</button>
 
   <h3>Veckovy</h3>
   <label>Välj vecka</label>
-  <input type="week" id="weekInput">
+  <input type="week" id="week" onchange="render()">
+
   <div id="weekSummary" class="summary"></div>
 
   <h3>Totalt flexsaldo</h3>
   <div id="totalFlex" class="summary"></div>
 
-  <h3>Dag-historik (klicka för att redigera)</h3>
-  <div id="daysList"></div>
+  <h3>Dag-historik</h3>
+  <div id="days"></div>
 </div>
 
 <script type="module">
@@ -99,84 +100,49 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-const STANDARD_MIN = 480;
+const STANDARD = 480;
 let userId = null;
 let days = [];
 
-/* DOM */
-const loginView = document.getElementById("loginView");
-const appView = document.getElementById("appView");
-const pinInput = document.getElementById("pinInput");
-const userLabel = document.getElementById("userLabel");
-const dateInput = document.getElementById("dateInput");
-const startInput = document.getElementById("startInput");
-const endInput = document.getElementById("endInput");
-const breakInput = document.getElementById("breakInput");
-const daysList = document.getElementById("daysList");
-const totalFlexDiv = document.getElementById("totalFlex");
-const weekInput = document.getElementById("weekInput");
-const weekSummary = document.getElementById("weekSummary");
+date.valueAsDate = new Date();
+week.value = isoWeek(new Date());
 
-/* Init */
-dateInput.valueAsDate = new Date();
-weekInput.value = isoWeekString(new Date());
-
-document.getElementById("loginBtn").onclick = login;
-document.getElementById("logoutBtn").onclick = logout;
-document.getElementById("saveBtn").onclick = saveDay;
-weekInput.onchange = render;
-
-/* Login */
-function login() {
-  const pin = pinInput.value.trim();
+window.login = function () {
+  const pin = document.getElementById("pin").value.trim();
   if (!pin) return;
   userId = pin;
   localStorage.setItem("flexUser", pin);
-  showApp();
-}
-
-function logout() {
-  localStorage.clear();
-  location.reload();
-}
-
-function showApp() {
   loginView.style.display = "none";
   appView.style.display = "block";
   userLabel.textContent = userId;
   loadDays();
-}
+};
 
-/* Logic */
-function minutes(a,b){
-  const [h1,m1]=a.split(":").map(Number);
-  const [h2,m2]=b.split(":").map(Number);
-  return h2*60+m2-(h1*60+m1);
-}
+window.logout = function () {
+  localStorage.clear();
+  location.reload();
+};
 
-async function saveDay() {
-  const date = dateInput.value;
-  if (!date || !startInput.value || !endInput.value) {
-    alert("Fyll i datum, start och slut");
-    return;
-  }
+window.saveDay = async function () {
+  if (!date.value || !start.value || !end.value) return;
 
-  const worked = minutes(startInput.value, endInput.value) - +breakInput.value;
-  const flex = worked - STANDARD_MIN;
+  const worked =
+    diff(start.value, end.value) - Number(break.value);
+  const flex = worked - STANDARD;
 
-  await setDoc(doc(db,"users",userId,"days",date),{
-    date,
-    start: startInput.value,
-    end: endInput.value,
-    br: +breakInput.value,
+  await setDoc(doc(db,"users",userId,"days",date.value),{
+    date: date.value,
+    start: start.value,
+    end: end.value,
+    br: Number(break.value),
     worked,
     flex
   });
 
   loadDays();
-}
+};
 
-async function loadDays() {
+async function loadDays(){
   days = [];
   const snap = await getDocs(collection(db,"users",userId,"days"));
   snap.forEach(d => days.push(d.data()));
@@ -184,67 +150,62 @@ async function loadDays() {
   render();
 }
 
-function render() {
-  daysList.innerHTML = "";
-  let totalFlex = 0;
-  let weekFlex = 0;
-  let weekWorked = 0;
-
-  const [ws,we] = weekRange(weekInput.value);
+window.render = function () {
+  days.innerHTML = "";
+  let total = 0, weekFlex = 0, weekWorked = 0;
+  const [ws,we] = weekRange(week.value);
 
   days.forEach(d=>{
-    totalFlex += d.flex;
+    total += d.flex;
     const dt = new Date(d.date);
-    if (dt >= ws && dt <= we) {
+    if (dt>=ws && dt<=we){
       weekFlex += d.flex;
       weekWorked += d.worked;
     }
-
     const div = document.createElement("div");
-    div.className = "card";
-    div.innerHTML = `${d.date} – <span class="${d.flex>=0?'pos':'neg'}">${d.flex} min</span>`;
-    div.onclick = ()=>loadDay(d);
-    daysList.appendChild(div);
+    div.className="card";
+    div.textContent = `${d.date} – ${d.flex} min`;
+    div.onclick=()=>loadDay(d);
+    days.appendChild(div);
   });
 
-  totalFlexDiv.innerHTML = `<strong>${totalFlex} min</strong>`;
-  weekSummary.innerHTML = `
-    Arbetade timmar: <strong>${(weekWorked/60).toFixed(1)} h</strong><br>
-    Veckoflex: <strong class="${weekFlex>=0?'pos':'neg'}">${weekFlex} min</strong>`;
-}
+  totalFlex.innerHTML = total+" min";
+  weekSummary.innerHTML =
+    `Arbetade timmar: ${(weekWorked/60).toFixed(1)} h<br>
+     Veckoflex: ${weekFlex} min`;
+};
 
 function loadDay(d){
-  dateInput.value = d.date;
-  startInput.value = d.start;
-  endInput.value = d.end;
-  breakInput.value = d.br;
+  date.value=d.date;
+  start.value=d.start;
+  end.value=d.end;
+  break.value=d.br;
 }
 
-/* Helpers */
+function diff(a,b){
+  const [h1,m1]=a.split(":").map(Number);
+  const [h2,m2]=b.split(":").map(Number);
+  return h2*60+m2-(h1*60+m1);
+}
+
 function weekRange(w){
-  const [y,wn] = w.split("-W").map(Number);
-  const d = new Date(y,0,1);
-  d.setDate(d.getDate() + (wn-1)*7);
-  while (d.getDay() !== 1) d.setDate(d.getDate()-1);
-  const start = new Date(d);
-  const end = new Date(d); end.setDate(d.getDate()+6);
-  return [start,end];
+  const [y,n]=w.split("-W").map(Number);
+  const d=new Date(y,0,1+(n-1)*7);
+  while(d.getDay()!=1)d.setDate(d.getDate()-1);
+  const s=new Date(d),e=new Date(d);e.setDate(d.getDate()+6);
+  return[s,e];
 }
 
-function isoWeekString(d){
-  d = new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
-  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
-  const week = Math.ceil((((d-yearStart)/86400000)+1)/7);
-  return `${d.getUTCFullYear()}-W${String(week).padStart(2,"0")}`;
+function isoWeek(d){
+  d=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  d.setUTCDate(d.getUTCDate()+4-(d.getUTCDay()||7));
+  const y=new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  const w=Math.ceil((((d-y)/86400000)+1)/7);
+  return `${d.getUTCFullYear()}-W${String(w).padStart(2,"0")}`;
 }
 
-/* Auto-login */
 const saved = localStorage.getItem("flexUser");
-if (saved) {
-  userId = saved;
-  showApp();
-}
+if(saved){ userId=saved; login(); }
 </script>
 
 </body>
