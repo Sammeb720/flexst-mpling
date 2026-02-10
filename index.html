@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Flexstämpling</title>
 
-<!-- PWA -->
 <link rel="manifest" href="manifest.json">
 
 <style>
@@ -28,6 +27,10 @@ input, button {
   margin-top:0.3rem;
 }
 button { margin-top:0.6rem; cursor:pointer; }
+button.danger {
+  background:#ffdddd;
+  border:1px solid #cc0000;
+}
 .card {
   background:#eee;
   padding:0.6rem;
@@ -63,7 +66,7 @@ button { margin-top:0.6rem; cursor:pointer; }
     <button onclick="logout()">Logga ut</button>
   </p>
 
-  <h3>Registrera dag</h3>
+  <h3>Registrera / redigera dag</h3>
 
   <label>Datum</label>
   <input type="date" id="dateInput">
@@ -81,6 +84,9 @@ button { margin-top:0.6rem; cursor:pointer; }
   <button onclick="stampNow('end')">⏹️ Stämpla ut nu</button>
 
   <button onclick="saveDay()">💾 Spara dagen</button>
+  <button id="deleteBtn" class="danger" onclick="deleteDay()" style="display:none;">
+    🗑️ Radera dagen
+  </button>
 
   <h3>Veckovy</h3>
   <label>Välj vecka</label>
@@ -97,7 +103,7 @@ button { margin-top:0.6rem; cursor:pointer; }
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getFirestore, collection, doc, setDoc, getDocs }
+import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 /* Firebase */
@@ -126,6 +132,7 @@ const weekInput = document.getElementById("weekInput");
 const weekSummary = document.getElementById("weekSummary");
 const totalFlexDiv = document.getElementById("totalFlex");
 const daysContainer = document.getElementById("daysContainer");
+const deleteBtn = document.getElementById("deleteBtn");
 
 /* Init */
 dateInput.valueAsDate = new Date();
@@ -134,10 +141,7 @@ weekInput.value = isoWeek(new Date());
 /* Login */
 window.login = function () {
   const pin = pinInput.value.trim();
-  if (!pin) {
-    alert("Ange en användarkod");
-    return;
-  }
+  if (!pin) return alert("Ange användarkod");
   userId = pin;
   localStorage.setItem("flexUser", pin);
   loginView.style.display = "none";
@@ -164,49 +168,52 @@ window.stampNow = function(type) {
   const hh = String(now.getHours()).padStart(2,"0");
   const mm = String(now.getMinutes()).padStart(2,"0");
   const time = `${hh}:${mm}`;
-
   if (type === "start") startInput.value = time;
   if (type === "end") endInput.value = time;
-
   dateInput.valueAsDate = new Date();
 };
 
-/* Save day */
+/* Spara */
 window.saveDay = async function () {
-  try {
-    if (!userId) {
-      alert("Inte inloggad");
-      return;
-    }
-    if (!dateInput.value || !startInput.value || !endInput.value) {
-      alert("Fyll i datum, start och slut");
-      return;
-    }
+  if (!dateInput.value || !startInput.value || !endInput.value)
+    return alert("Fyll i datum, start och slut");
 
-    const worked =
-      minutes(startInput.value, endInput.value) -
-      Number(breakInput.value);
+  const worked =
+    minutes(startInput.value, endInput.value) -
+    Number(breakInput.value);
 
-    const flex = worked - STANDARD_MIN;
+  const flex = worked - STANDARD_MIN;
 
-    await setDoc(
-      doc(db, "users", userId, "days", dateInput.value),
-      {
-        date: dateInput.value,
-        start: startInput.value,
-        end: endInput.value,
-        br: Number(breakInput.value),
-        worked,
-        flex,
-        updatedAt: new Date().toISOString()
-      }
-    );
+  await setDoc(doc(db, "users", userId, "days", dateInput.value), {
+    date: dateInput.value,
+    start: startInput.value,
+    end: endInput.value,
+    br: Number(breakInput.value),
+    worked,
+    flex,
+    updatedAt: new Date().toISOString()
+  });
 
-    alert("✅ Dagen sparad");
-    loadDays();
-  } catch (e) {
-    alert("❌ Kunde inte spara: " + e.message);
-  }
+  alert("✅ Dagen sparad");
+  loadDays();
+};
+
+/* RADERA DAG */
+window.deleteDay = async function () {
+  const date = dateInput.value;
+  if (!date) return;
+
+  if (!confirm(`Vill du verkligen radera ${date}?`)) return;
+
+  await deleteDoc(doc(db, "users", userId, "days", date));
+
+  // Rensa formuläret
+  startInput.value = "";
+  endInput.value = "";
+  breakInput.value = 60;
+  deleteBtn.style.display = "none";
+
+  loadDays();
 };
 
 /* Load & render */
@@ -245,14 +252,10 @@ window.render = function () {
     daysContainer.appendChild(div);
   });
 
-  totalFlexDiv.innerHTML =
-    `<strong>${totalFlex} min</strong>`;
-
+  totalFlexDiv.innerHTML = `<strong>${totalFlex} min</strong>`;
   weekSummary.innerHTML =
-    `Arbetade timmar: <strong>${(weekWorked / 60).toFixed(1)} h</strong><br>
-     Veckoflex: <strong class="${weekFlex >= 0 ? 'pos' : 'neg'}">
-       ${weekFlex >= 0 ? '+' : ''}${weekFlex} min
-     </strong>`;
+    `Arbetade timmar: <strong>${(weekWorked/60).toFixed(1)} h</strong><br>
+     Veckoflex: <strong class="${weekFlex>=0?'pos':'neg'}">${weekFlex} min</strong>`;
 };
 
 function loadDay(d) {
@@ -260,6 +263,7 @@ function loadDay(d) {
   startInput.value = d.start;
   endInput.value = d.end;
   breakInput.value = d.br;
+  deleteBtn.style.display = "block";
 }
 
 /* Week helpers */
@@ -278,7 +282,7 @@ function isoWeek(d) {
   d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
   const y = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
   const w = Math.ceil((((d - y) / 86400000) + 1) / 7);
-  return `${d.getUTCFullYear()}-W${String(w).padStart(2, "0")}`;
+  return `${d.getUTCFullYear()}-W${String(w).padStart(2,"0")}`;
 }
 
 /* Auto-login */
