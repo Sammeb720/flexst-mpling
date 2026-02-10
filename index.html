@@ -143,9 +143,16 @@
   /* =======================
      AUTH
   ======================= */
-  window.login = async () => {
+window.login = async () => {
+  alert("Login klickad – försöker öppna popup");
+  try {
     await signInWithPopup(auth, provider);
-  };
+    alert("Popup lyckades");
+  } catch (e) {
+    alert("Popup BLOCKERAD:\n" + e.message);
+    console.error(e);
+  }
+};
 
   window.logout = async () => {
     await signOut(auth);
