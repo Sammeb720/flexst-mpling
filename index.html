@@ -115,12 +115,11 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-/* State */
-const STANDARD_MIN = 480;
-let userId = null;
-let daysData = [];
-
 /* DOM */
+const loginView = document.getElementById("loginView");
+const appView = document.getElementById("appView");
+const pinInput = document.getElementById("pinInput");
+const userLabel = document.getElementById("userLabel");
 const dateInput = document.getElementById("dateInput");
 const startInput = document.getElementById("startInput");
 const endInput = document.getElementById("endInput");
@@ -129,6 +128,11 @@ const weekInput = document.getElementById("weekInput");
 const daysContainer = document.getElementById("daysContainer");
 const totalFlexDiv = document.getElementById("totalFlex");
 const weekSummary = document.getElementById("weekSummary");
+
+/* State */
+const STANDARD_MIN = 480;
+let userId = null;
+let daysData = [];
 
 /* Init */
 dateInput.valueAsDate = new Date();
@@ -158,7 +162,6 @@ function minutes(a,b){
   return h2*60+m2-(h1*60+m1);
 }
 
-/* Stämpla NU */
 window.stampNow = (type) => {
   const t = new Date().toTimeString().slice(0,5);
   if (type==="start") startInput.value=t;
@@ -166,15 +169,11 @@ window.stampNow = (type) => {
   dateInput.valueAsDate = new Date();
 };
 
-/* Spara dag */
 window.saveDay = async () => {
   if (!dateInput.value || !startInput.value || !endInput.value)
     return alert("Fyll i datum, start och slut");
 
-  const worked =
-    minutes(startInput.value,endInput.value) -
-    Number(breakInput.value);
-
+  const worked = minutes(startInput.value,endInput.value) - Number(breakInput.value);
   const flex = worked - STANDARD_MIN;
 
   await setDoc(doc(db,"users",userId,"days",dateInput.value),{
@@ -189,7 +188,6 @@ window.saveDay = async () => {
   loadDays();
 };
 
-/* Load ALL days once */
 async function loadDays(){
   daysData=[];
   const snap=await getDocs(collection(db,"users",userId,"days"));
@@ -198,21 +196,15 @@ async function loadDays(){
   render();
 }
 
-/* Render ONLY selected week */
 window.render = () => {
   daysContainer.innerHTML="";
-
-  let totalFlex=0;
-  let weekFlex=0;
-  let weekWorked=0;
-
+  let totalFlex=0, weekFlex=0, weekWorked=0;
   const [ws,we]=weekRange(weekInput.value);
 
   daysData.forEach(d=>{
     totalFlex+=d.flex;
-
     const dt=new Date(d.date);
-    if(dt < ws || dt > we) return;   // ⭐ ENDAST VALD VECKA
+    if(dt<ws||dt>we) return;
 
     weekFlex+=d.flex;
     weekWorked+=d.worked;
@@ -229,7 +221,7 @@ window.render = () => {
     del.className="deleteBtn";
     del.textContent="Radera";
     del.onclick=async()=>{
-      if(!confirm(\`Radera ${d.date}?\`)) return;
+      if(!confirm(\`Radera ${d.date}?\`))return;
       await deleteDoc(doc(db,"users",userId,"days",d.date));
       loadDays();
     };
@@ -239,10 +231,10 @@ window.render = () => {
     daysContainer.appendChild(row);
   });
 
-  totalFlexDiv.innerHTML = `<strong>${totalFlex} min</strong>`;
-  weekSummary.innerHTML =
+  totalFlexDiv.innerHTML=`<strong>${totalFlex} min</strong>`;
+  weekSummary.innerHTML=
     `Arbetade timmar: <strong>${(weekWorked/60).toFixed(1)} h</strong><br>
-     Veckoflex: <strong class="${weekFlex>=0?'pos':'neg'}">${weekFlex} min</strong>`;
+     Veckoflex: <strong>${weekFlex} min</strong>`;
 };
 
 function loadDay(d){
@@ -252,7 +244,6 @@ function loadDay(d){
   breakInput.value=d.br;
 }
 
-/* Week helpers */
 function weekRange(w){
   const[y,n]=w.split("-W").map(Number);
   const d=new Date(y,0,1+(n-1)*7);
