@@ -108,16 +108,22 @@
   window.login = () => signInWithRedirect(auth, provider);
   window.logout = () => signOut(auth);
 
-  getRedirectResult(auth).catch(() => {});
-
   onAuthStateChanged(auth, async user => {
-    if (!user) return;
+  const loginDiv = document.getElementById("login");
+  const appDiv = document.getElementById("app");
+
+  if (user) {
     uid = user.uid;
-    document.getElementById("login").style.display = "none";
-    document.getElementById("app").style.display = "block";
+    loginDiv.style.display = "none";
+    appDiv.style.display = "block";
     document.getElementById("email").textContent = user.email;
     await loadDays();
-  });
+  } else {
+    loginDiv.style.display = "block";
+    appDiv.style.display = "none";
+  }
+});
+
 
   function stamp(type) {
     const t = new Date().toTimeString().slice(0,5);
