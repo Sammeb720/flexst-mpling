@@ -6,32 +6,61 @@
 <title>Flexstämpling</title>
 
 <style>
-body { font-family: system-ui; background:#f4f4f4; padding:1rem; }
-.app { max-width:520px; margin:auto; background:#fff; padding:1rem; border-radius:12px; }
+body {
+  font-family: system-ui, sans-serif;
+  background:#f4f4f4;
+  padding:1rem;
+}
+.app {
+  max-width:520px;
+  margin:auto;
+  background:white;
+  padding:1rem;
+  border-radius:12px;
+}
 label { display:block; margin-top:1rem; }
-input, button { width:100%; padding:0.6rem; margin-top:0.3rem; }
-button { margin-top:0.8rem; }
-.card { background:#eee; padding:0.6rem; margin-top:0.4rem; border-radius:6px; cursor:pointer; }
+input, button {
+  width:100%;
+  padding:0.6rem;
+  margin-top:0.3rem;
+}
+button { margin-top:0.8rem; cursor:pointer; }
+.card {
+  background:#eee;
+  padding:0.6rem;
+  margin-top:0.4rem;
+  border-radius:6px;
+  cursor:pointer;
+}
 .pos { color:green; }
 .neg { color:red; }
-.summary { background:#f0f0f0; padding:0.6rem; border-radius:6px; margin-top:0.6rem; }
+.summary {
+  background:#f0f0f0;
+  padding:0.6rem;
+  border-radius:6px;
+  margin-top:0.6rem;
+}
 </style>
 </head>
 
 <body>
 
+<!-- LOGIN -->
 <div id="loginView" class="app">
   <h2>Flexstämpling</h2>
   <label>Användarkod</label>
-  <input id="pinInput">
-  <button id="loginBtn">Logga in</button>
+  <input id="pinInput" placeholder="t.ex. alex">
+  <button onclick="login()">Logga in</button>
 </div>
 
+<!-- APP -->
 <div id="appView" class="app" style="display:none;">
   <p>
     Inloggad som <strong id="userLabel"></strong>
-    <button id="logoutBtn">Logga ut</button>
+    <button onclick="logout()">Logga ut</button>
   </p>
+
+  <h3>Registrera dag</h3>
 
   <label>Datum</label>
   <input type="date" id="dateInput">
@@ -45,32 +74,36 @@ button { margin-top:0.8rem; }
   <label>Rast (min)</label>
   <input type="number" id="breakInput" value="60">
 
-  <button id="saveBtn">💾 Spara dagen</button>
+  <button onclick="saveDay()">💾 Spara dagen</button>
 
-  <label>Vecka</label>
-  <input type="week" id="weekInput">
+  <h3>Veckovy</h3>
+  <label>Välj vecka</label>
+  <input type="week" id="weekInput" onchange="render()">
 
   <div id="weekSummary" class="summary"></div>
+
+  <h3>Totalt flexsaldo</h3>
   <div id="totalFlex" class="summary"></div>
 
-  <h3>Dag-historik</h3>
+  <h3>Dag-historik (klicka för att redigera)</h3>
   <div id="daysContainer"></div>
 </div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getFirestore, collection, doc, setDoc, getDocs } 
+import { getFirestore, collection, doc, setDoc, getDocs }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
+/* Firebase */
 const firebaseConfig = {
   apiKey: "AIzaSyCSkjN-SafQEZrbhhhu-Mue4hf3GfADN3w",
   projectId: "flexstampling"
 };
-
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-const STANDARD = 480;
+/* State */
+const STANDARD_MIN = 480;
 let userId = null;
 let daysData = [];
 
@@ -83,114 +116,159 @@ const dateInput = document.getElementById("dateInput");
 const startInput = document.getElementById("startInput");
 const endInput = document.getElementById("endInput");
 const breakInput = document.getElementById("breakInput");
-const daysContainer = document.getElementById("daysContainer");
-const totalFlexDiv = document.getElementById("totalFlex");
-const weekSummary = document.getElementById("weekSummary");
 const weekInput = document.getElementById("weekInput");
+const weekSummary = document.getElementById("weekSummary");
+const totalFlexDiv = document.getElementById("totalFlex");
+const daysContainer = document.getElementById("daysContainer");
 
 /* Init */
 dateInput.valueAsDate = new Date();
 weekInput.value = isoWeek(new Date());
 
-document.getElementById("loginBtn").onclick = login;
-document.getElementById("logoutBtn").onclick = logout;
-document.getElementById("saveBtn").onclick = saveDay;
-weekInput.onchange = render;
-
 /* Login */
-function login(){
+window.login = function () {
   const pin = pinInput.value.trim();
-  if(!pin) return;
+  if (!pin) {
+    alert("Ange en användarkod");
+    return;
+  }
   userId = pin;
   localStorage.setItem("flexUser", pin);
   loginView.style.display = "none";
   appView.style.display = "block";
   userLabel.textContent = userId;
   loadDays();
-}
+};
 
-function logout(){
-  localStorage.clear();
+window.logout = function () {
+  localStorage.removeItem("flexUser");
   location.reload();
+};
+
+/* Helpers */
+function minutes(a, b) {
+  const [h1, m1] = a.split(":").map(Number);
+  const [h2, m2] = b.split(":").map(Number);
+  return h2 * 60 + m2 - (h1 * 60 + m1);
 }
 
-/* Logic */
-function minutes(a,b){
-  const [h1,m1]=a.split(":").map(Number);
-  const [h2,m2]=b.split(":").map(Number);
-  return h2*60+m2-(h1*60+m1);
-}
+/* Save day */
+window.saveDay = async function () {
+  try {
+    if (!userId) {
+      alert("Inte inloggad");
+      return;
+    }
+    if (!dateInput.value || !startInput.value || !endInput.value) {
+      alert("Fyll i datum, start och slut");
+      return;
+    }
 
-async function saveDay(){
-  if(!dateInput.value||!startInput.value||!endInput.value) return;
-  const worked = minutes(startInput.value,endInput.value)-Number(breakInput.value);
-  const flex = worked-STANDARD;
+    const worked =
+      minutes(startInput.value, endInput.value) -
+      Number(breakInput.value);
 
-  await setDoc(doc(db,"users",userId,"days",dateInput.value),{
-    date:dateInput.value,
-    start:startInput.value,
-    end:endInput.value,
-    br:Number(breakInput.value),
-    worked,flex
-  });
-  loadDays();
-}
+    const flex = worked - STANDARD_MIN;
 
-async function loadDays(){
-  daysData=[];
-  const snap = await getDocs(collection(db,"users",userId,"days"));
-  snap.forEach(d=>daysData.push(d.data()));
-  daysData.sort((a,b)=>a.date.localeCompare(b.date));
+    await setDoc(
+      doc(db, "users", userId, "days", dateInput.value),
+      {
+        date: dateInput.value,
+        start: startInput.value,
+        end: endInput.value,
+        br: Number(breakInput.value),
+        worked,
+        flex,
+        updatedAt: new Date().toISOString()
+      }
+    );
+
+    alert("✅ Dagen sparad");
+    loadDays();
+  } catch (e) {
+    console.error(e);
+    alert("❌ Kunde inte spara: " + e.message);
+  }
+};
+
+/* Load & render */
+async function loadDays() {
+  daysData = [];
+  const snap = await getDocs(collection(db, "users", userId, "days"));
+  snap.forEach(d => daysData.push(d.data()));
+  daysData.sort((a, b) => a.date.localeCompare(b.date));
   render();
 }
 
-function render(){
-  daysContainer.innerHTML="";
-  let total=0, weekFlex=0, weekWorked=0;
-  const [ws,we]=weekRange(weekInput.value);
+window.render = function () {
+  daysContainer.innerHTML = "";
+  let totalFlex = 0;
+  let weekFlex = 0;
+  let weekWorked = 0;
 
-  daysData.forEach(d=>{
-    total+=d.flex;
-    const dt=new Date(d.date);
-    if(dt>=ws&&dt<=we){weekFlex+=d.flex;weekWorked+=d.worked;}
+  const [ws, we] = weekRange(weekInput.value);
 
-    const el=document.createElement("div");
-    el.className="card";
-    el.textContent=`${d.date} – ${d.flex} min`;
-    el.onclick=()=>loadDay(d);
-    daysContainer.appendChild(el);
+  daysData.forEach(d => {
+    totalFlex += d.flex;
+    const dt = new Date(d.date);
+    if (dt >= ws && dt <= we) {
+      weekFlex += d.flex;
+      weekWorked += d.worked;
+    }
+
+    const div = document.createElement("div");
+    div.className = "card";
+    div.innerHTML = `
+      ${d.date} –
+      <span class="${d.flex >= 0 ? 'pos' : 'neg'}">
+        ${d.flex >= 0 ? '+' : ''}${d.flex} min
+      </span>`;
+    div.onclick = () => loadDay(d);
+    daysContainer.appendChild(div);
   });
 
-  totalFlexDiv.innerHTML=`Totalt flex: <strong>${total} min</strong>`;
-  weekSummary.innerHTML=`Vecka: ${(weekWorked/60).toFixed(1)} h, Flex: ${weekFlex} min`;
+  totalFlexDiv.innerHTML =
+    `<strong>${totalFlex} min</strong>`;
+
+  weekSummary.innerHTML =
+    `Arbetade timmar: <strong>${(weekWorked / 60).toFixed(1)} h</strong><br>
+     Veckoflex: <strong class="${weekFlex >= 0 ? 'pos' : 'neg'}">
+       ${weekFlex >= 0 ? '+' : ''}${weekFlex} min
+     </strong>`;
+};
+
+function loadDay(d) {
+  dateInput.value = d.date;
+  startInput.value = d.start;
+  endInput.value = d.end;
+  breakInput.value = d.br;
 }
 
-function loadDay(d){
-  dateInput.value=d.date;
-  startInput.value=d.start;
-  endInput.value=d.end;
-  breakInput.value=d.br;
+/* Week helpers */
+function weekRange(w) {
+  const [y, n] = w.split("-W").map(Number);
+  const d = new Date(y, 0, 1 + (n - 1) * 7);
+  while (d.getDay() !== 1) d.setDate(d.getDate() - 1);
+  const s = new Date(d);
+  const e = new Date(d);
+  e.setDate(d.getDate() + 6);
+  return [s, e];
 }
 
-/* Helpers */
-function weekRange(w){
-  const [y,n]=w.split("-W").map(Number);
-  const d=new Date(y,0,1+(n-1)*7);
-  while(d.getDay()!=1)d.setDate(d.getDate()-1);
-  const s=new Date(d),e=new Date(d);e.setDate(d.getDate()+6);
-  return[s,e];
-}
-function isoWeek(d){
-  d=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
-  d.setUTCDate(d.getUTCDate()+4-(d.getUTCDay()||7));
-  const y=new Date(Date.UTC(d.getUTCFullYear(),0,1));
-  const w=Math.ceil((((d-y)/86400000)+1)/7);
-  return `${d.getUTCFullYear()}-W${String(w).padStart(2,"0")}`;
+function isoWeek(d) {
+  d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const y = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const w = Math.ceil((((d - y) / 86400000) + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(w).padStart(2, "0")}`;
 }
 
 /* Auto-login */
-const saved=localStorage.getItem("flexUser");
-if(saved){pinInput.value=saved;login();}
+const saved = localStorage.getItem("flexUser");
+if (saved) {
+  pinInput.value = saved;
+  login();
+}
 </script>
 
 </body>
