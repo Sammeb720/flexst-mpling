@@ -94,7 +94,8 @@
   import {
     getAuth,
     GoogleAuthProvider,
-    signInWithPopup,
+    signInWithRedirect,
+    getRedirectResult,
     onAuthStateChanged,
     signOut,
     setPersistence,
@@ -143,20 +144,15 @@
   /* =======================
      AUTH
   ======================= */
-window.login = async () => {
-  alert("Login klickad – försöker öppna popup");
-  try {
-    await signInWithPopup(auth, provider);
-    alert("Popup lyckades");
-  } catch (e) {
-    alert("Popup BLOCKERAD:\n" + e.message);
-    console.error(e);
-  }
-};
+  window.login = async () => {
+    await signInWithRedirect(auth, provider);
+  };
 
   window.logout = async () => {
     await signOut(auth);
   };
+
+  getRedirectResult(auth).catch(() => {});
 
   onAuthStateChanged(auth, async user => {
     const loginDiv = document.getElementById("login");
